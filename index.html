@@ -3,45 +3,43 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Multi‑Mode Typing Layout — Continue-on-Grid + Zoom/Pan</title>
+<title>Multi‑Mode Typing Layout — Continue-on-Grid + Zoom/Pan (v0.5)</title>
 <style>
-  :root { --bg:#fff; --fg:#111; --muted:#666; --anim-ms:800; }
+  :root { 
+    --bg:#fff; --fg:#333; --muted:#999; --anim-ms:400;
+    --border:#f0f0f0; --border-hover:#ddd; --btn-bg:#fff; --btn-hover:#f9f9f9;
+    --stage-bg:#fff; --panel-bg:transparent; --toast-bg:#333; --toast-fg:#fff;
+  }
+  [data-theme="dark"] {
+    --bg:#1a1a1a; --fg:#e0e0e0; --muted:#888;
+    --border:#333; --border-hover:#555; --btn-bg:#2a2a2a; --btn-hover:#3a3a3a;
+    --stage-bg:#222; --panel-bg:transparent; --toast-bg:#f0f0f0; --toast-fg:#333;
+  }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Helvetica,Arial,Apple SD Gothic Neo,"Malgun Gothic",sans-serif}
-  .wrap{display:grid;grid-template-rows:auto 1fr auto;min-height:100dvh}
-  header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #eaeaea}
-  .modes{display:flex;gap:6px;flex-wrap:wrap}
-  .mode{appearance:none;border:1px solid #e5e5e5;background:#fff;color:var(--fg);padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer}
-  .mode.active{background:#111;color:#fff;border-color:#111}
-  .stage{position:relative;overflow:hidden;isolation:isolate;height:60vh;margin:12px 16px;border:1px solid #eee;border-radius:14px;background:#fff}
+  .wrap{display:grid;grid-template-rows:1fr auto;min-height:100dvh}
+  .modes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;justify-content:space-between;align-items:center}
+  .modes .dark-toggle{margin-left:auto}
+  .mode{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.2s ease}
+  .mode.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .stage{position:relative;overflow:hidden;isolation:isolate;height:75vh;margin:16px 16px 4px 16px;border:1px solid var(--border);border-radius:8px;background:var(--stage-bg)}
   .content{position:absolute;inset:0;transform-origin:0 0}
-  .glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:#111;user-select:none;white-space:pre}
-  .panel{display:grid;grid-template-columns:1fr 320px;gap:16px;padding:0 16px 16px}
-  textarea{width:100%;min-height:130px;resize:vertical;padding:12px;border:1px solid #eaeaea;border-radius:10px;font-size:14px;color:var(--fg);background:#fff;outline:none}
-  .help{font-size:12px;color:var(--muted)}
-  .footer{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 16px;font-size:12px;color:var(--muted)}
+  .glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:var(--fg);user-select:none;white-space:pre}
+  .panel{padding:16px;margin-top:-12px}
+  textarea{width:100%;min-height:80px;resize:vertical;padding:12px;border:1px solid var(--border);border-radius:6px;font-size:14px;color:var(--fg);background:var(--btn-bg);outline:none;transition:border-color 0.2s ease}
+  textarea:focus{border-color:var(--border-hover)}
   /* Zoom UI */
-  .zoomDock{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;background:rgba(255,255,255,.85);border:1px solid #eee;border-radius:10px;padding:6px;backdrop-filter:saturate(1.2) blur(2px)}
-  .zbtn{appearance:none;border:1px solid #ddd;background:#fff;color:#111;font-size:12px;padding:6px 8px;border-radius:8px;cursor:pointer}
-  .zbtn:hover{border-color:#bbb}
+  .zoomDock{position:absolute;right:12px;bottom:12px;display:flex;gap:4px;background:var(--btn-bg);border:1px solid var(--border);border-radius:6px;padding:4px;backdrop-filter:blur(4px)}
+  .zbtn{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:all 0.2s ease}
+  .zbtn:hover{border-color:var(--border-hover);background:var(--btn-hover)}
   .stage.panning{cursor:grab}
   .stage.panning.dragging{cursor:grabbing}
   /* Toast */
-  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#111;color:#fff;padding:8px 12px;border-radius:10px;font-size:12px;opacity:0;pointer-events:none;transition:opacity .25s ease}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-fg);padding:6px 10px;border-radius:6px;font-size:11px;opacity:0;pointer-events:none;transition:opacity .25s ease}
   .toast.show{opacity:.9}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="title">Multi‑Mode Typing Layout</div>
-    <div class="modes" id="modeBar">
-      <button class="mode active" data-mode="normal">Normal</button>
-      <button class="mode" data-mode="circle">Circle</button>
-      <button class="mode" data-mode="spiral">Spiral</button>
-      <button class="mode" data-mode="wave">Wave</button>
-      <button class="mode" data-mode="tree">Tree</button>
-    </div>
-  </header>
 
   <div class="stage" id="stage" aria-label="렌더 스테이지">
     <div id="content" class="content"></div>
@@ -55,17 +53,17 @@
   <div class="toast" id="toast" hidden></div>
 
   <section class="panel">
-    <div>
-      <textarea id="input" placeholder="여기에 타이핑하고, 중간에 모드를 바꾸면 그 지점부터 새 그리드로 이어서 작성됩니다."></textarea>
-      <div class="help">휠로 줌, <b>Space+드래그</b>로 이동, 오른쪽 아래 버튼으로 +/−/리셋/Fit</div>
+    <div class="modes" id="modeBar">
+      <button class="mode active" data-mode="normal">Normal</button>
+      <button class="mode" data-mode="circle">Circle</button>
+      <button class="mode" data-mode="spiral">Spiral</button>
+      <button class="mode" data-mode="wave">Wave</button>
+      <button class="mode" data-mode="tree">Tree</button>
+      <button class="mode dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
     </div>
-    <div class="help">
-      <p><strong>모드</strong> — Normal / Circle / Spiral / Wave / Tree</p>
-      <p>Tree는 레벨이 깊어질수록 좌우 폭이 커지고 <em>결정론적</em> jitter로 자연스럽게 퍼집니다.</p>
-    </div>
+    <textarea id="input" placeholder="타이핑하세요"></textarea>
   </section>
 
-  <div class="footer"><span>⌨️ 계속 타이핑 → 임의 시점에 모드 전환 → 이어서 작성</span><span>v0.4</span></div>
 </div>
 
 <script>
@@ -76,12 +74,24 @@
   const input = document.getElementById('input');
   const modeBar = document.getElementById('modeBar');
   const toast = document.getElementById('toast');
+  const darkToggle = document.getElementById('darkToggle');
+
+  // ===== Mode params (tweak here) =====
+  const NORMAL_COLS = 60;                    // Normal 폭(열 수)
+  const NORMAL_STEP_X = 12, NORMAL_STEP_Y = 24;
+  const CIRCLE_RADIUS = 120;                 // Circle 반경
+  const SPIRAL_A = 3, SPIRAL_B = 0.10;       // Spiral 성장률
+  const WAVE_A = 60, WAVE_LAMBDA = 140;      // Wave 진폭/파장
+  const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40; // Tree 확산
+  const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;          // Tree 흔들림 강도
+  const FIT_PADDING = 40;                    // Fit 여백
 
   // ===== State =====
   let mode = 'normal';
   let glyphs = [];            // placed glyphs {el,ch,x,y,z}
   let prevText = '';
   const pen = { x:0, y:0, z:0, i:0, mode:'normal', anchorX:0, anchorY:0, anchorZ:0 };
+  let didAutoFit = false;
 
   function stageRect(){ return stage.getBoundingClientRect(); }
   function initPen(){ const r=stageRect(); pen.x=r.width/2; pen.y=r.height/2; pen.z=0; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; }
@@ -92,26 +102,23 @@
 
   // ===== Paths (relative to anchor) =====
   const stepSize = 16;
-  const NORMAL_COLS = 60; // 고정 열 수로 Normal 모드 재배치 방지
-
   const Path = {
     normal(i){
       const cols = NORMAL_COLS; // 화면 폭에 의존하지 않음
       const row = Math.floor(i / cols);
       const col = i % cols;
-      const stepX = 16, stepY = 24;
-      return { dx: col*stepX, dy: row*stepY, dz: 0, rot: 0, scale: 1 };
+      return { dx: col*NORMAL_STEP_X, dy: row*NORMAL_STEP_Y, dz: 0, rot: 0, scale: 1 };
     },
-    circle(i){ const radius=120; const t=i*(Math.PI/16); return { dx:radius*Math.cos(t), dy:radius*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
-    spiral(i){ const b=0.10; const t=i*(Math.PI/10); const a=3; const r=a*Math.exp(b*t)*6; return { dx:r*Math.cos(t), dy:r*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
-    wave(i){ const A=60, lambda=140; const x=i*stepSize; const y=A*Math.sin((2*Math.PI/lambda)*x); return { dx:x, dy:y, dz:0, rot:0, scale:1 }; },
+    circle(i){ const t=i*(Math.PI/16); return { dx:CIRCLE_RADIUS*Math.cos(t), dy:CIRCLE_RADIUS*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
+    spiral(i){ const t=i*(Math.PI/10); const r=SPIRAL_A*Math.exp(SPIRAL_B*t)*6; return { dx:r*Math.cos(t), dy:r*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
+    wave(i){ const x=i*stepSize; const y=WAVE_A*Math.sin((2*Math.PI/WAVE_LAMBDA)*x); return { dx:x, dy:y, dz:0, rot:0, scale:1 }; },
     tree(i){
       const level=Math.floor(Math.log2(i+1));
-      const start=Math.pow(2,level)-1; const j=i-start; const count=Math.pow(2,level);
-      const spread=(120+level*40); // wider per level
+      const start=(2**level)-1; const j=i-start; const count=2**level;
+      const spread=(TREE_SPREAD_BASE+level*TREE_SPREAD_STEP);
       const jx=jitter(i,1), jy=jitter(i,2);
-      const x=((j+0.5)/count-0.5)*spread*2 + jx*level*8;
-      const y=level*60 + jy*level*5;
+      const x=((j+0.5)/count-0.5)*spread*2 + jx*level*TREE_JITTER_X;
+      const y=level*60 + jy*level*TREE_JITTER_Y;
       return { dx:x, dy:y, dz:0, rot:0, scale:1 };
     }
   };
@@ -124,17 +131,43 @@
   function placeCaret(){ caret.style.transform = `translate3d(${pen.x}px, ${pen.y}px, ${pen.z}px)`; }
 
   // ===== Place/Remove glyphs =====
-  function placeNextChar(ch){
-    const p = getPath(pen.mode)(pen.i);
-    const x = pen.anchorX + p.dx, y = pen.anchorY + p.dy, z = pen.anchorZ + p.dz;
-    const el = document.createElement('div'); el.className = 'glyph';
-    el.textContent = (ch === '\n') ? '⏎' : (ch === ' ' ? '·' : ch);
-    const rotate = (pen.mode==='circle'||pen.mode==='spiral') ? ` rotate(${p.rot}rad)` : '';
-    el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)` + rotate;
-    content.appendChild(el);
-    glyphs.push({ el, ch, x, y, z });
-    pen.x = x; pen.y = y; pen.z = z; pen.i += 1; placeCaret();
+function placeNextChar(ch){
+  // 1) 줄바꿈: 기호 없이 실제 줄바꿈처럼 동작 (glyph 생성하지 않음)
+  if (ch === '\n') {
+    // 새 줄의 앵커로 이동
+    pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
+    // 줄 시작점으로 커서 이동
+    pen.x = pen.anchorX;
+    pen.y = pen.anchorY;
+    pen.z = pen.anchorZ;
+    // 새 줄의 경로는 처음부터
+    pen.i = 0;
+    placeCaret();
+    maybeAutoFit?.();
+    return;
   }
+
+  // 2) 일반 문자 배치
+  const p = getPath(pen.mode)(pen.i);
+  const x = pen.anchorX + p.dx, y = pen.anchorY + p.dy, z = pen.anchorZ + p.dz;
+
+  const el = document.createElement('div');
+  el.className = 'glyph';
+
+  // 스페이스는 원래처럼 공백으로 표시
+  el.textContent = (ch === ' ' ? ' ' : ch);
+
+  const rotate = (pen.mode === 'circle' || pen.mode === 'spiral') ? ` rotate(${p.rot}rad)` : '';
+  el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)` + rotate;
+
+  content.appendChild(el);
+  glyphs.push({ el, ch, x, y, z });
+
+  pen.x = x; pen.y = y; pen.z = z;
+  pen.i += 1;
+  placeCaret();
+  maybeAutoFit?.();
+}
   function backspaceOne(){
     if(!glyphs.length) return;
     const g = glyphs.pop(); g.el.remove();
@@ -142,6 +175,7 @@
     if(last){ pen.x=last.x; pen.y=last.y; pen.z=last.z; } else { initPen(); }
     pen.i = Math.max(0, pen.i-1); placeCaret();
   }
+  function maybeAutoFit(){ if(!didAutoFit && glyphs.length===1){ fitToView(); didAutoFit=true; } }
 
   // ===== Strict append-only input handling =====
   const STRICT_APPEND = true; // 과거 글자 절대 고정
@@ -193,22 +227,66 @@
   }
 
   // ===== Mode switch (past glyphs untouched) =====
-  modeBar.addEventListener('click', (e) => {
-    const b = e.target.closest('.mode'); if(!b) return;
-    mode = b.dataset.mode;
-    document.querySelectorAll('.mode').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  function setMode(newMode){
+    mode = newMode;
+    document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('active', x.dataset.mode===newMode));
+    // 과거 글자 고정: 앵커만 현재 펜 위치로 갱신
     pen.mode = mode; pen.anchorX = pen.x; pen.anchorY = pen.y; pen.anchorZ = pen.z; pen.i = 0; placeCaret();
+    // 모드 변경 후 자동으로 textarea에 포커스
+    focusToTextarea();
+  }
+  
+  function focusToTextarea(){
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  // ===== Dark Mode =====
+  function toggleDarkMode(){
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    darkToggle.textContent = isDark ? '🌙' : '☀️';
+    localStorage.setItem('theme', newTheme);
+  }
+
+  function initDarkMode(){
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    darkToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+  }
+  modeBar.addEventListener('click', (e) => {
+    const b = e.target.closest('.mode'); if(!b) return; 
+    
+    // 다크모드 토글 처리
+    if(b.id === 'darkToggle') {
+      toggleDarkMode();
+      return;
+    }
+    
+    setMode(b.dataset.mode);
   });
 
   // ===== Zoom & Pan =====
   let zoom=1, offsetX=0, offsetY=0; const minZoom=0.3, maxZoom=4;
   function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function applyView(){ content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; }
+  function updateZoomDisplay(){ const btn = zoomDock.querySelector('[data-zoom="reset"]'); if(btn) btn.textContent = Math.round(zoom*100) + '%'; }
+  function applyView(){ content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; updateZoomDisplay(); }
   function zoomAt(cx,cy,f){ const nz=clamp(zoom*f,minZoom,maxZoom); const px=(cx-offsetX)/zoom; const py=(cy-offsetY)/zoom; zoom=nz; offsetX=cx-px*zoom; offsetY=cy-py*zoom; applyView(); }
   function contentBounds(){ if(!glyphs.length) return {minX:0,minY:0,maxX:1,maxY:1}; let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; glyphs.forEach(g=>{minX=Math.min(minX,g.x);minY=Math.min(minY,g.y);maxX=Math.max(maxX,g.x);maxY=Math.max(maxY,g.y);}); return {minX,minY,maxX,maxY}; }
-  function fitToView(){ const r=stageRect(); const b=contentBounds(); const pad=40; const w=Math.max(1,b.maxX-b.minX+pad*2); const h=Math.max(1,b.maxY-b.minY+pad*2); const s=Math.min(r.width/w,r.height/h); zoom=clamp(s,minZoom,maxZoom); offsetX=(r.width-(b.maxX-b.minX)*zoom)/2 - b.minX*zoom; offsetY=(r.height-(b.maxY-b.minY)*zoom)/2 - b.minY*zoom; applyView(); }
+  function fitToView(){ const r=stageRect(); const b=contentBounds(); const w=Math.max(1,b.maxX-b.minX+FIT_PADDING*2); const h=Math.max(1,b.maxY-b.minY+FIT_PADDING*2); const s=Math.min(r.width/w,r.height/h); zoom=clamp(s,minZoom,maxZoom); offsetX=(r.width-(b.maxX-b.minX)*zoom)/2 - b.minX*zoom; offsetY=(r.height-(b.maxY-b.minY)*zoom)/2 - b.minY*zoom; applyView(); }
 
-  stage.addEventListener('wheel', (e)=>{ e.preventDefault(); const rect=stageRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top; const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); }, {passive:false});
+  // Debounced wheel zoom (reduce oversensitivity)
+  let lastWheel = 0;
+  stage.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel < 16) return; // ~60fps cap
+    lastWheel = now;
+    const rect=stageRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top; const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); updateZoomDisplay();
+  }, {passive:false});
+
+  // Pan
   let spaceDown=false, dragging=false, lastX=0,lastY=0;
   window.addEventListener('keydown', (e)=>{ if(e.code==='Space'){ spaceDown=true; stage.classList.add('panning'); e.preventDefault(); } });
   window.addEventListener('keyup',   (e)=>{ if(e.code==='Space'){ spaceDown=false; stage.classList.remove('panning'); } });
@@ -218,8 +296,17 @@
 
   zoomDock.addEventListener('click', (e)=>{ const b=e.target.closest('.zbtn'); if(!b) return; const rect=stageRect(); const cx=rect.width/2, cy=rect.height/2; const t=b.dataset.zoom; if(t==='in') return zoomAt(cx,cy,1.2); if(t==='out') return zoomAt(cx,cy,1/1.2); if(t==='reset'){ zoom=1; offsetX=0; offsetY=0; return applyView(); } if(t==='fit') return fitToView(); });
 
+  // 보드를 클릭하면 textarea에 포커스
+  stage.addEventListener('pointerdown', (e) => {
+    // Space 드래그/중클릭 팬 중이면 포커스 강제 안 함
+    if (spaceDown || e.button === 1) return;
+    focusToTextarea();
+  });
+
+
   // init
   document.documentElement.style.setProperty('--anim-ms','800');
+  initDarkMode();
   initPen(); placeCaret(); applyView();
 })();
 </script>
