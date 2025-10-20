@@ -3,41 +3,71 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Multi‑Mode Typing Layout — Continue-on-Grid + Zoom/Pan (v0.5)</title>
+<title>Multi-Mode Typing Layout — Continue-on-Grid + Zoom/Pan (v0.7.1—fullscreen)</title>
 <style>
   :root { 
     --bg:#fff; --fg:#333; --muted:#999; --anim-ms:400;
     --border:#f0f0f0; --border-hover:#ddd; --btn-bg:#fff; --btn-hover:#f9f9f9;
-    --stage-bg:#fff; --panel-bg:transparent; --toast-bg:#333; --toast-fg:#fff;
+    --stage-bg:#fff; --panel-bg:rgba(255,255,255,0.6); --toast-bg:#333; --toast-fg:#fff;
   }
   [data-theme="dark"] {
     --bg:#1a1a1a; --fg:#e0e0e0; --muted:#888;
     --border:#333; --border-hover:#555; --btn-bg:#2a2a2a; --btn-hover:#3a3a3a;
-    --stage-bg:#222; --panel-bg:transparent; --toast-bg:#f0f0f0; --toast-fg:#333;
+    --stage-bg:#222; --panel-bg:rgba(26,26,26,0.5); --toast-bg:#f0f0f0; --toast-fg:#333;
   }
+
+  /* === FULLSCREEN LAYOUT === */
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:"Futura",ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Helvetica,Arial,Apple SD Gothic Neo,"Malgun Gothic",sans-serif}
-  .wrap{display:grid;grid-template-rows:1fr auto;min-height:100dvh}
-  .modes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;justify-content:space-between;align-items:center}
-  .modes .dark-toggle{margin-left:auto}
-  .mode{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.2s ease}
-  .mode.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-  .stage{position:relative;overflow:hidden;isolation:isolate;height:75vh;margin:16px 16px 4px 16px;border:1px solid var(--border);border-radius:8px;background:var(--stage-bg)}
+  .wrap{display:grid;grid-template-rows:1fr;min-height:100dvh}
+
+  .stage{
+    position:relative;overflow:hidden;isolation:isolate;
+    height:100dvh;              /* FULLSCREEN */
+    margin:0;                   /* remove outer margin */
+    border:1px solid var(--border);
+    border-radius:0;            /* flush to edges */
+    background:var(--stage-bg)
+  }
+
   .content{position:absolute;inset:0;transform-origin:0 0}
+
   .glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:var(--fg);user-select:none;white-space:pre}
-  .panel{padding:16px;margin-top:-12px}
-  textarea{width:100%;min-height:80px;resize:vertical;padding:12px;border:1px solid var(--border);border-radius:6px;font-size:14px;color:var(--fg);background:var(--btn-bg);outline:none;transition:border-color 0.2s ease}
-  textarea:focus{border-color:var(--border-hover)}
+
+  /* Hidden proxy input for direct-on-stage typing */
+  .proxyInput{position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;}
+
   /* Zoom UI */
-  .zoomDock{position:absolute;right:12px;bottom:12px;display:flex;gap:4px;background:var(--btn-bg);border:1px solid var(--border);border-radius:6px;padding:4px;backdrop-filter:blur(4px)}
+  .zoomDock{
+    position:absolute;right:12px;bottom:12px;display:flex;gap:4px;
+    background:var(--btn-bg);border:1px solid var(--border);border-radius:6px;padding:4px;backdrop-filter:blur(4px)
+  }
   .zbtn{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:all 0.2s ease}
   .zbtn:hover{border-color:var(--border-hover);background:var(--btn-hover)}
   .stage.panning{cursor:grab}
   .stage.panning.dragging{cursor:grabbing}
+
   /* Toast */
   .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-fg);padding:6px 10px;border-radius:6px;font-size:11px;opacity:0;pointer-events:none;transition:opacity .25s ease}
   .toast.show{opacity:.9}
+
   /* Pan hint */
   .pan-hint{position:absolute;left:12px;bottom:12px;color:var(--muted);font-size:10px;pointer-events:none;user-select:none}
+
+  /* === PANEL AS OVERLAY === */
+  .panel{
+    position:absolute;left:12px;top:12px;z-index:5;
+    padding:12px 12px; margin:0;
+    background:var(--panel-bg); border:1px solid var(--border); border-radius:8px;
+    backdrop-filter: blur(6px);
+  }
+  .panel.hidden{display:none}
+
+  .modes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .modes .dark-toggle{margin-left:auto}
+  .mode{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.2s ease}
+  .mode.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+  textarea{width:100%;min-height:0;resize:none;padding:0;border:0;outline:none}
 </style>
 </head>
 <body>
@@ -45,78 +75,89 @@
 
   <div class="stage" id="stage" aria-label="렌더 스테이지">
     <div id="content" class="content"></div>
+
+    <!-- Overlay panel (inside stage) -->
+    <section class="panel" id="panel">
+      <div class="modes" id="modeBar">
+        <button class="mode active" data-mode="normal">Normal</button>
+        <button class="mode" data-mode="circle">Circle</button>
+        <button class="mode" data-mode="spiral">Spiral</button>
+        <button class="mode" data-mode="wave">Wave</button>
+        <button class="mode" data-mode="tree">Tree</button>
+        <button class="mode dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
+      </div>
+      <!-- proxy input stays hidden; keep in DOM -->
+      <textarea id="proxyInput" class="proxyInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0"></textarea>
+    </section>
+
+    <!-- Zoom dock extended with Panel toggle -->
     <div class="zoomDock">
       <button class="zbtn" data-zoom="out" title="Zoom out">−</button>
       <button class="zbtn" data-zoom="reset" title="Reset to 100%">100%</button>
       <button class="zbtn" data-zoom="in" title="Zoom in">+</button>
       <button class="zbtn" data-zoom="fit" title="Fit to view">Fit</button>
+      <button class="zbtn" data-panel="toggle" title="Toggle panel (P)">Panel</button>
     </div>
+
     <div class="pan-hint">Hold Space + drag to pan view</div>
   </div>
+
   <div class="toast" id="toast" hidden></div>
-
-  <section class="panel">
-    <div class="modes" id="modeBar">
-      <button class="mode active" data-mode="normal">Normal</button>
-      <button class="mode" data-mode="circle">Circle</button>
-      <button class="mode" data-mode="spiral">Spiral</button>
-      <button class="mode" data-mode="wave">Wave</button>
-      <button class="mode" data-mode="tree">Tree</button>
-      <button class="mode dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
-    </div>
-    <textarea id="input" placeholder="type here"></textarea>
-  </section>
-
 </div>
 
 <script>
 (() => {
-  const stage = document.getElementById('stage');
+  const stage   = document.getElementById('stage');
   const content = document.getElementById('content');
-  const zoomDock = stage.querySelector('.zoomDock');
-  const input = document.getElementById('input');
+  const zoomDock= stage.querySelector('.zoomDock');
+  const panel   = document.getElementById('panel');
+  const input   = document.getElementById('proxyInput');
   const modeBar = document.getElementById('modeBar');
-  const toast = document.getElementById('toast');
+  const toast   = document.getElementById('toast');
   const darkToggle = document.getElementById('darkToggle');
 
-  // ===== Mode params (tweak here) =====
-  const NORMAL_COLS = 60;                    // Normal 폭(열 수)
+  // ===== Mode params =====
+  const NORMAL_COLS = 60;
   const NORMAL_STEP_X = 12, NORMAL_STEP_Y = 24;
-  const CIRCLE_RADIUS = 120;                 // Circle 반경
-  const SPIRAL_A = 3, SPIRAL_B = 0.10;       // Spiral 성장률
-  const WAVE_A = 60, WAVE_LAMBDA = 140;      // Wave 진폭/파장
-  const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40; // Tree 확산
-  const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;          // Tree 흔들림 강도
-  const FIT_PADDING = 40;                    // Fit 여백
+  const CIRCLE_RADIUS = 120;
+  const SPIRAL_A = 3, SPIRAL_B = 0.10;
+  const WAVE_A = 60, WAVE_LAMBDA = 140;
+  const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40;
+  const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;
+  const FIT_PADDING = 40;
 
-  // ===== State =====
-  let mode = 'normal';
-  let glyphs = [];            // placed glyphs {el,ch,x,y,z}
-  let prevText = '';
-  const pen = { x:0, y:0, z:0, i:0, mode:'normal', anchorX:0, anchorY:0, anchorZ:0 };
-  let didAutoFit = false;
+  // Tracking
+  let TRACK_LATIN = 0;
+  let TRACK_HANGUL = 3;
+  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false };
+
+  function isHangul(ch){ const c=ch.codePointAt(0);
+    return (c>=0x1100&&c<=0x11FF)||(c>=0x3130&&c<=0x318F)||(c>=0xAC00&&c<=0xD7AF); }
+  function isLatin(ch){ const c=ch.codePointAt(0);
+    return (c>=0x0041&&c<=0x005A)||(c>=0x0061&&c<=0x007A)||(c>=0x0030&&c<=0x0039); }
+
+  // State
+  let mode='normal';
+  let glyphs=[];
+  let prevText='';
+  const pen={ x:0,y:0,z:0,i:0,mode:'normal',anchorX:0,anchorY:0,anchorZ:0,_trackX:0 };
+  let didAutoFit=false;
 
   function stageRect(){ return stage.getBoundingClientRect(); }
   function initPen(){ const r=stageRect(); pen.x=r.width/2; pen.y=r.height/2; pen.z=0; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; }
 
-  // ===== Deterministic jitter (for Tree) =====
+  // Deterministic jitter
   function hash32(x){ let t=x+0x6D2B79F5; t=Math.imul(t ^ (t>>>15), t|1); t^= t + Math.imul(t ^ (t>>>7), t | 61); return ((t ^ (t>>>14))>>>0)/4294967296; }
-  function jitter(i, salt){ return hash32(i*73856093 + salt*19349663) - 0.5; }
+  function jitter(i, s){ return hash32(i*73856093 + s*19349663) - 0.5; }
 
-  // ===== Paths (relative to anchor) =====
-  const stepSize = 16;
-  const Path = {
-    normal(i){
-      const cols = NORMAL_COLS; // 화면 폭에 의존하지 않음
-      const row = Math.floor(i / cols);
-      const col = i % cols;
-      return { dx: col*NORMAL_STEP_X, dy: row*NORMAL_STEP_Y, dz: 0, rot: 0, scale: 1 };
-    },
+  const stepSize=16;
+  const Path={
+    normal(i){ const cols=NORMAL_COLS; const row=Math.floor(i/cols), col=i%cols;
+      return { dx:col*NORMAL_STEP_X, dy:row*NORMAL_STEP_Y, dz:0, rot:0, scale:1 }; },
     circle(i){ const t=i*(Math.PI/16); return { dx:CIRCLE_RADIUS*Math.cos(t), dy:CIRCLE_RADIUS*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
     spiral(i){ const t=i*(Math.PI/10); const r=SPIRAL_A*Math.exp(SPIRAL_B*t)*6; return { dx:r*Math.cos(t), dy:r*Math.sin(t), dz:0, rot:t+Math.PI/2, scale:1 }; },
     wave(i){ const x=i*stepSize; const y=WAVE_A*Math.sin((2*Math.PI/WAVE_LAMBDA)*x); return { dx:x, dy:y, dz:0, rot:0, scale:1 }; },
-    tree(i){
-      const level=Math.floor(Math.log2(i+1));
+    tree(i){ const level=Math.floor(Math.log2(i+1));
       const start=(2**level)-1; const j=i-start; const count=2**level;
       const spread=(TREE_SPREAD_BASE+level*TREE_SPREAD_STEP);
       const jx=jitter(i,1), jy=jitter(i,2);
@@ -125,192 +166,246 @@
       return { dx:x, dy:y, dz:0, rot:0, scale:1 };
     }
   };
-  function getPath(name){ return Path[name] || Path.normal; }
+  function getPath(n){ return Path[n]||Path.normal; }
 
-  // ===== Caret =====
-  const caret = document.createElement('div');
-  caret.className = 'glyph'; caret.textContent = '▮'; caret.style.opacity = '0.5';
+  // Caret
+  const caret=document.createElement('div');
+  caret.className='glyph'; caret.textContent='▮'; caret.style.opacity='0.5';
   content.appendChild(caret);
-  function placeCaret(){ caret.style.transform = `translate3d(${pen.x}px, ${pen.y}px, ${pen.z}px)`; }
+  function placeCaret(){ caret.style.transform=`translate3d(${pen.x}px, ${pen.y}px, ${pen.z}px)`; }
 
-  // ===== Place/Remove glyphs =====
-function placeNextChar(ch){
-  // 1) 줄바꿈: 기호 없이 실제 줄바꿈처럼 동작 (glyph 생성하지 않음)
-  if (ch === '\n') {
-    // 새 줄의 앵커로 이동
-    pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
-    // 줄 시작점으로 커서 이동
-    pen.x = pen.anchorX;
-    pen.y = pen.anchorY;
-    pen.z = pen.anchorZ;
-    // 새 줄의 경로는 처음부터
-    pen.i = 0;
-    placeCaret();
-    maybeAutoFit?.();
-    return;
+  function placeNextChar(ch){
+    if (ch === '\n'){
+      pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
+      pen.x = pen.anchorX; pen.y = pen.anchorY; pen.z = pen.anchorZ;
+      pen.i = 0; pen._trackX = 0; placeCaret(); maybeAutoFit(); return;
+    }
+    const p=getPath(pen.mode)(pen.i);
+    let extraX=0;
+    if (TRACK_APPLY_MODES[pen.mode]){
+      const t = isHangul(ch) ? TRACK_HANGUL : TRACK_LATIN;
+      extraX = pen._trackX || 0;
+      pen._trackX = (pen._trackX || 0) + t;
+    }
+    const x=pen.anchorX + p.dx + extraX, y=pen.anchorY + p.dy, z=pen.anchorZ + p.dz;
+
+    const el=document.createElement('div');
+    el.className='glyph';
+    el.textContent = (ch===' ' ? ' ' : ch);
+    const rotate = (pen.mode==='circle'||pen.mode==='spiral') ? ` rotate(${p.rot}rad)` : '';
+    el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)` + rotate;
+
+    content.appendChild(el);
+    glyphs.push({el,ch,x,y,z});
+
+    pen.x=x; pen.y=y; pen.z=z; pen.i+=1; placeCaret(); maybeAutoFit();
   }
 
-  // 2) 일반 문자 배치
-  const p = getPath(pen.mode)(pen.i);
-  const x = pen.anchorX + p.dx, y = pen.anchorY + p.dy, z = pen.anchorZ + p.dz;
-
-  const el = document.createElement('div');
-  el.className = 'glyph';
-
-  // 스페이스는 원래처럼 공백으로 표시
-  el.textContent = (ch === ' ' ? ' ' : ch);
-
-  const rotate = (pen.mode === 'circle' || pen.mode === 'spiral') ? ` rotate(${p.rot}rad)` : '';
-  el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)` + rotate;
-
-  content.appendChild(el);
-  glyphs.push({ el, ch, x, y, z });
-
-  pen.x = x; pen.y = y; pen.z = z;
-  pen.i += 1;
-  placeCaret();
-  maybeAutoFit?.();
-}
   function backspaceOne(){
     if(!glyphs.length) return;
-    const g = glyphs.pop(); g.el.remove();
-    const last = glyphs[glyphs.length-1];
+    const g=glyphs.pop(); g.el.remove();
+    const last=glyphs[glyphs.length-1];
     if(last){ pen.x=last.x; pen.y=last.y; pen.z=last.z; } else { initPen(); }
-    pen.i = Math.max(0, pen.i-1); placeCaret();
+    pen.i=Math.max(0,pen.i-1); placeCaret();
   }
+
   function maybeAutoFit(){ if(!didAutoFit && glyphs.length===1){ fitToView(); didAutoFit=true; } }
 
-  // ===== Strict append-only input handling =====
-  const STRICT_APPEND = true; // 과거 글자 절대 고정
-  let composing = false;
-  input.addEventListener('compositionstart', () => composing = true);
-  input.addEventListener('compositionend',  () => { composing = false; processInput(); });
-  input.addEventListener('input',           () => { if (!composing) processInput(); });
+  // Strict append-only
+  const STRICT_APPEND=true;
+  let composing=false;
+  input.addEventListener('compositionstart', ()=> composing=true);
+  input.addEventListener('compositionend',  ()=>{ composing=false; processInput(); });
+  input.addEventListener('input',           ()=>{ if(!composing) processInput(); });
 
   function showToast(msg){
     if (!toast) return;
-    toast.textContent = msg;
-    toast.hidden = false; toast.classList.add('show');
+    toast.textContent=msg; toast.hidden=false; toast.classList.add('show');
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(()=>{ toast.classList.remove('show'); toast.hidden = true; }, 1200);
+    showToast._t=setTimeout(()=>{ toast.classList.remove('show'); toast.hidden=true; }, 1200);
   }
 
   function processInput(){
-    const cur = input.value;
-    const selStart = input.selectionStart;
-    const isTail = (selStart === cur.length);
-
-    if (cur.startsWith(prevText)) {
-      // tail append
-      const appended = cur.slice(prevText.length);
-      for (const ch of appended) placeNextChar(ch);
-      prevText = cur; return;
+    const cur=input.value; const selStart=input.selectionStart; const isTail=(selStart===cur.length);
+    if(cur.startsWith(prevText)){ const appended=cur.slice(prevText.length); for(const ch of appended) placeNextChar(ch); prevText=cur; return; }
+    if(prevText.startsWith(cur) && isTail){ const n=prevText.length-cur.length; for(let i=0;i<n;i++) backspaceOne(); prevText=cur; return; }
+    if(STRICT_APPEND){
+      input.value=prevText; input.setSelectionRange(prevText.length,prevText.length);
+      showToast('중간 편집은 이어쓰기 모드에서 허용되지 않습니다.'); return;
     }
-
-    if (prevText.startsWith(cur) && isTail) {
-      // tail backspace
-      const n = prevText.length - cur.length;
-      for (let i=0;i<n;i++) backspaceOne();
-      prevText = cur; return;
-    }
-
-    // non-tail edit
-    if (STRICT_APPEND) {
-      input.value = prevText; // 되돌림
-      input.setSelectionRange(prevText.length, prevText.length);
-      showToast('중간 편집은 이어쓰기 모드에서 허용되지 않습니다.');
-      return;
-    }
-
-    // fallback: safe replay (deterministic positions)
-    content.querySelectorAll('.glyph').forEach(n=>n.remove()); glyphs=[];
-    initPen(); placeCaret();
-    for (const ch of cur) placeNextChar(ch);
-    prevText = cur;
+    content.querySelectorAll('.glyph').forEach(n=>n.remove()); glyphs=[]; initPen(); placeCaret();
+    for(const ch of cur) placeNextChar(ch); prevText=cur;
   }
 
-  // ===== Mode switch (past glyphs untouched) =====
+  // Mode switch
   function setMode(newMode){
-    mode = newMode;
+    mode=newMode;
     document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('active', x.dataset.mode===newMode));
-    // 과거 글자 고정: 앵커만 현재 펜 위치로 갱신
-    pen.mode = mode; pen.anchorX = pen.x; pen.anchorY = pen.y; pen.anchorZ = pen.z; pen.i = 0; placeCaret();
-    // 모드 변경 후 자동으로 textarea에 포커스
+    pen.mode=mode; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; pen._trackX=0; placeCaret();
     focusToTextarea();
   }
-  
+
   function focusToTextarea(){
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    requestAnimationFrame(()=>{
+      input.focus({ preventScroll:true });
+      const len=input.value.length; try{ input.setSelectionRange(len,len); }catch(_){}
+    });
   }
 
-  // ===== Dark Mode =====
+  // Dark mode
   function toggleDarkMode(){
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const newTheme = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
+    const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+    const next=isDark?'light':'dark';
+    document.documentElement.setAttribute('data-theme', next);
     darkToggle.textContent = isDark ? '🌙' : '☀️';
-    localStorage.setItem('theme', newTheme);
+    localStorage.setItem('theme', next);
   }
-
   function initDarkMode(){
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    darkToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    const saved=localStorage.getItem('theme')||'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    darkToggle.textContent = saved==='dark' ? '☀️' : '🌙';
   }
-  modeBar.addEventListener('click', (e) => {
-    const b = e.target.closest('.mode'); if(!b) return; 
-    
-    // 다크모드 토글 처리
-    if(b.id === 'darkToggle') {
-      toggleDarkMode();
-      return;
-    }
-    
+  modeBar.addEventListener('click', (e)=>{
+    const b=e.target.closest('.mode'); if(!b) return;
+    if(b.id==='darkToggle'){ toggleDarkMode(); return; }
     setMode(b.dataset.mode);
   });
 
   // ===== Zoom & Pan =====
   let zoom=1, offsetX=0, offsetY=0; const minZoom=0.3, maxZoom=4;
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function updateZoomDisplay(){ const btn = zoomDock.querySelector('[data-zoom="reset"]'); if(btn) btn.textContent = Math.round(zoom*100) + '%'; }
-  function applyView(){ content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; updateZoomDisplay(); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+  function updateZoomDisplay(){ const btn=zoomDock.querySelector('[data-zoom="reset"]'); if(btn) btn.textContent=Math.round(zoom*100)+'%'; }
+  function applyView(){ content.style.transform=`translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; updateZoomDisplay(); }
   function zoomAt(cx,cy,f){ const nz=clamp(zoom*f,minZoom,maxZoom); const px=(cx-offsetX)/zoom; const py=(cy-offsetY)/zoom; zoom=nz; offsetX=cx-px*zoom; offsetY=cy-py*zoom; applyView(); }
   function contentBounds(){ if(!glyphs.length) return {minX:0,minY:0,maxX:1,maxY:1}; let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; glyphs.forEach(g=>{minX=Math.min(minX,g.x);minY=Math.min(minY,g.y);maxX=Math.max(maxX,g.x);maxY=Math.max(maxY,g.y);}); return {minX,minY,maxX,maxY}; }
   function fitToView(){ const r=stageRect(); const b=contentBounds(); const w=Math.max(1,b.maxX-b.minX+FIT_PADDING*2); const h=Math.max(1,b.maxY-b.minY+FIT_PADDING*2); const s=Math.min(r.width/w,r.height/h); zoom=clamp(s,minZoom,maxZoom); offsetX=(r.width-(b.maxX-b.minX)*zoom)/2 - b.minX*zoom; offsetY=(r.height-(b.maxY-b.minY)*zoom)/2 - b.minY*zoom; applyView(); }
 
-  // Debounced wheel zoom (reduce oversensitivity)
-  let lastWheel = 0;
+  function toContentCoords(clientX, clientY){
+    const r=stageRect(); const sx=clientX-r.left; const sy=clientY-r.top;
+    return { x:(sx-offsetX)/zoom, y:(sy-offsetY)/zoom };
+  }
+
+  // Debounced wheel zoom
+  let lastWheel=0;
   stage.addEventListener('wheel', (e)=>{
     e.preventDefault();
-    const now = performance.now();
-    if (now - lastWheel < 16) return; // ~60fps cap
-    lastWheel = now;
-    const rect=stageRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top; const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); updateZoomDisplay();
+    const now=performance.now(); if(now-lastWheel<16) return; lastWheel=now;
+    const rect=stageRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
+    const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); updateZoomDisplay();
   }, {passive:false});
 
-  // Pan
+  // Pan + Click-to-Type
   let spaceDown=false, dragging=false, lastX=0,lastY=0;
-  window.addEventListener('keydown', (e)=>{ if(e.code==='Space'){ spaceDown=true; stage.classList.add('panning'); e.preventDefault(); } });
-  window.addEventListener('keyup',   (e)=>{ if(e.code==='Space'){ spaceDown=false; stage.classList.remove('panning'); } });
-  stage.addEventListener('pointerdown', (e)=>{ if(spaceDown||e.button===1){ dragging=true; stage.classList.add('dragging'); lastX=e.clientX; lastY=e.clientY; stage.setPointerCapture(e.pointerId); } });
-  stage.addEventListener('pointermove', (e)=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; offsetX+=dx; offsetY+=dy; lastX=e.clientX; lastY=e.clientY; applyView(); });
-  stage.addEventListener('pointerup',   ()=>{ dragging=false; stage.classList.remove('dragging'); });
+  let gestureActive=false, gDownX=0, gDownY=0, gSpaceAtDown=false;
+  const DRAG_THRESHOLD=4;
 
-  zoomDock.addEventListener('click', (e)=>{ const b=e.target.closest('.zbtn'); if(!b) return; const rect=stageRect(); const cx=rect.width/2, cy=rect.height/2; const t=b.dataset.zoom; if(t==='in') return zoomAt(cx,cy,1.2); if(t==='out') return zoomAt(cx,cy,1/1.2); if(t==='reset'){ zoom=1; offsetX=0; offsetY=0; return applyView(); } if(t==='fit') return fitToView(); });
+  // 드래그 종료 후 포커스 복구 플래그
+  let restoreFocusAfterDrag = false;
 
-  // 보드를 클릭하면 textarea에 포커스
-  stage.addEventListener('pointerdown', (e) => {
-    // Space 드래그/중클릭 팬 중이면 포커스 강제 안 함
-    if (spaceDown || e.button === 1) return;
-    focusToTextarea();
+  // UI 영역(패널/줌Dock) 클릭 여부
+  function isUIHit(target){
+    return !!(target.closest('.panel') || target.closest('.zoomDock'));
+  }
+
+  window.addEventListener('keydown', (e)=>{ 
+    if(e.code==='Space'){ spaceDown=true; stage.classList.add('panning'); e.preventDefault(); }
+    if(e.key==='p' || e.key==='P'){ panel.classList.toggle('hidden'); } // Panel toggle (P)
   });
 
+  window.addEventListener('keyup', (e)=>{
+    if(e.code==='Space'){
+      spaceDown=false; stage.classList.remove('panning');
+      if (!dragging) focusToTextarea();  // Space만 떼어도 포커스 복구
+    }
+  });
+
+  // 패널 쪽 이벤트 전파 차단 — 이중 안전장치
+  panel.addEventListener('pointerdown', (e)=> e.stopPropagation());
+  panel.addEventListener('pointerup',   (e)=> e.stopPropagation());
+  panel.addEventListener('click',       (e)=> e.stopPropagation());
+
+  // pointerdown — UI 클릭은 제스처 시작 안 함
+  stage.addEventListener('pointerdown', (e)=>{
+    if (isUIHit(e.target)) return;   // 패널/줌Dock 내부 클릭 무시
+
+    if(e.button===1){
+      dragging=true; stage.classList.add('dragging');
+      lastX=e.clientX; lastY=e.clientY;
+      stage.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    gestureActive=true; gDownX=e.clientX; gDownY=e.clientY; gSpaceAtDown=spaceDown;
+
+    if(spaceDown){
+      dragging=true; stage.classList.add('dragging');
+      lastX=e.clientX; lastY=e.clientY;
+      restoreFocusAfterDrag = true;         // 패닝 종료 시 포커스 복구
+      stage.setPointerCapture(e.pointerId);
+      return;
+    }
+    e.preventDefault();
+  });
+
+  // pointermove — 패닝
+  stage.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    offsetX+=dx; offsetY+=dy; lastX=e.clientX; lastY=e.clientY; applyView();
+  });
+
+  // pointerup — UI 클릭이거나 드래그/공간키 관련이면 커서 이동 스킵
+  stage.addEventListener('pointerup', (e)=>{
+    if(dragging){
+      dragging=false; stage.classList.remove('dragging');
+      if (restoreFocusAfterDrag) {
+        restoreFocusAfterDrag = false;
+        focusToTextarea();               // 패닝 종료 즉시 포커스 복구
+      }
+    }
+    if(!gestureActive) return;
+    const moved=Math.hypot(e.clientX-gDownX, e.clientY-gDownY);
+    const wasSpace=gSpaceAtDown; 
+    gestureActive=false;
+
+    if (isUIHit(e.target)) return;      // UI 클릭이면 커서 이동 없음
+    if(moved<=DRAG_THRESHOLD && !wasSpace && e.button!==1){
+      const {x,y}=toContentCoords(e.clientX, e.clientY);
+      pen.anchorX=x; pen.anchorY=y; pen.anchorZ=0; 
+      pen.x=x; pen.y=y; pen.z=0; pen.i=0; pen._trackX=0;
+      placeCaret(); focusToTextarea();
+    }
+  });
+
+  // Keep typing flowing to proxy input even if stage has focus
+  stage.addEventListener('keydown', (e)=>{
+    if(e.code==='Space') return;
+    if(document.activeElement!==input){ focusToTextarea(); }
+  });
+
+  // Zoom dock handlers
+  zoomDock.addEventListener('click', (e)=>{
+    const zb=e.target.closest('.zbtn'); if(!zb) return;
+    const z=zb.dataset.zoom;
+    if(z==='in'){ const r=stageRect(); zoomAt(r.width/2, r.height/2, 1.1); }
+    else if(z==='out'){ const r=stageRect(); zoomAt(r.width/2, r.height/2, 1/1.1); }
+    else if(z==='reset'){ zoom=1; offsetX=0; offsetY=0; applyView(); }
+    else if(z==='fit'){ fitToView(); }
+
+    if(zb.dataset.panel==='toggle' || zb.getAttribute('data-panel')==='toggle'){
+      panel.classList.toggle('hidden');
+      // 패널 토글 후에도 입력 포커스 유지
+      focusToTextarea();
+    }
+  });
 
   // init
   document.documentElement.style.setProperty('--anim-ms','800');
   initDarkMode();
   initPen(); placeCaret(); applyView();
+
+  // On resize, keep fit if nothing typed yet; else maintain current view
+  window.addEventListener('resize', ()=>{ if(!glyphs.length){ applyView(); } });
 })();
 </script>
 </body>
