@@ -29,10 +29,10 @@
   const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40;
   const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;
   const FIT_PADDING = 40;
-  const RANDOM_COLS = 40;
   const RANDOM_STEP_X = 18, RANDOM_STEP_Y = 28;
   const RANDOM_JITTER_X = 14, RANDOM_JITTER_Y = 20;
   const RANDOM_SCALE_MIN = 0.6, RANDOM_SCALE_MAX = 1.6;
+  const RANDOM_ROT_MAX = Math.PI / 4;
 
   // Tracking
   let TRACK_LATIN = 0;
@@ -57,6 +57,17 @@
   // Deterministic jitter
   function hash32(x){ let t=x+0x6D2B79F5; t=Math.imul(t ^ (t>>>15), t|1); t^= t + Math.imul(t ^ (t>>>7), t | 61); return ((t ^ (t>>>14))>>>0)/4294967296; }
   function jitter(i, s){ return hash32(i*73856093 + s*19349663) - 0.5; }
+  const RAND_BUF = (typeof Uint32Array !== 'undefined') ? new Uint32Array(1) : null;
+  function rand(){
+    const g=typeof globalThis!=='undefined'?globalThis:null;
+    const c=g && g.crypto && typeof g.crypto.getRandomValues==='function' ? g.crypto : null;
+    if(c && RAND_BUF){
+      c.getRandomValues(RAND_BUF);
+      return RAND_BUF[0]/4294967295;
+    }
+    return Math.random();
+  }
+  function randomInRange(min,max){ return min + (max - min) * rand(); }
 
   const stepSize=16;
   const Path={
@@ -74,15 +85,21 @@
       return { dx:x, dy:y, dz:0, rot:0, scale:1 };
     },
     random(i){
-      const cols=RANDOM_COLS;
-      const row=Math.floor(i/cols), col=i%cols;
-      const baseX=col*RANDOM_STEP_X;
-      const baseY=row*RANDOM_STEP_Y;
-      const jx=jitter(i,3)*RANDOM_JITTER_X;
-      const jy=jitter(i,4)*RANDOM_JITTER_Y;
-      const scaleRand = hash32(i*95939543);
-      const scale = RANDOM_SCALE_MIN + (RANDOM_SCALE_MAX - RANDOM_SCALE_MIN) * scaleRand;
-      return { dx:baseX + jx, dy:baseY + jy, dz:0, rot:0, scale };
+      const baseScale = randomInRange(RANDOM_SCALE_MIN, RANDOM_SCALE_MAX);
+      const baseRot = (rand()*2 - 1) * RANDOM_ROT_MAX;
+      if(i===0){
+        const dx0 = (rand()*2 - 1) * RANDOM_STEP_X * 0.5;
+        const dy0 = (rand()*2 - 1) * RANDOM_STEP_Y * 0.5;
+        return { dx:dx0, dy:dy0, dz:0, rot:baseRot, scale:baseScale };
+      }
+      const radialBase = Math.sqrt(i + 1) * RANDOM_STEP_Y;
+      const radius = randomInRange(radialBase * 0.65, radialBase * 1.35 + RANDOM_JITTER_Y);
+      const angle = rand() * Math.PI * 2;
+      const jitterX = (rand()*2 - 1) * RANDOM_JITTER_X;
+      const jitterY = (rand()*2 - 1) * RANDOM_JITTER_Y;
+      const dx = Math.cos(angle) * radius + jitterX;
+      const dy = Math.sin(angle) * radius + jitterY;
+      return { dx, dy, dz:0, rot:baseRot, scale:baseScale };
     }
   };
   function getPath(n){ return Path[n]||Path.normal; }
@@ -112,7 +129,7 @@
     el.className='glyph';
     el.textContent = (ch===' ' ? ' ' : ch);
     const transforms = [`translate3d(${x}px, ${y}px, ${z}px)`];
-    if ((pen.mode==='circle' || pen.mode==='spiral') && p.rot){
+    if (p.rot){
       transforms.push(`rotate(${p.rot}rad)`);
     }
     if (p.scale && p.scale !== 1){
