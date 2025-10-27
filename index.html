@@ -6,9 +6,9 @@
 <title>Multi-Mode Typing Layout — Continue-on-Grid + Zoom/Pan (v0.7.1—fullscreen)</title>
 <style>
   :root { 
-    --bg:#fff; --fg:#333; --muted:#999; --anim-ms:400;
-    --border:#f0f0f0; --border-hover:#ddd; --btn-bg:#fff; --btn-hover:#f9f9f9;
-    --stage-bg:#fff; --panel-bg:rgba(255,255,255,0.6); --toast-bg:#333; --toast-fg:#fff;
+    --bg:#f6f6f6; --fg:#333; --muted:#999; --anim-ms:400;
+    --border:#f0f0f0; --border-hover:#ddd; --btn-bg:#f6f6f6; --btn-hover:#f9f9f9;
+    --stage-bg:#f6f6f6; --panel-bg:rgba(255,255,255,0.6); --toast-bg:#333; --toast-fg:#f6f6f6;
   }
   [data-theme="dark"] {
     --bg:#1a1a1a; --fg:#e0e0e0; --muted:#888;
@@ -19,16 +19,22 @@
   /* === FULLSCREEN LAYOUT === */
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:"Futura",ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Helvetica,Arial,Apple SD Gothic Neo,"Malgun Gothic",sans-serif}
   .wrap{display:grid;grid-template-rows:1fr;min-height:100dvh}
+:lang(ko) { font-family: "Pretendard Variable", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
 
   .stage{
     position:relative;overflow:hidden;isolation:isolate;
-    height:100dvh;              /* FULLSCREEN */
-    margin:0;                   /* remove outer margin */
+    height:100dvh;
+    margin:0;
     border:1px solid var(--border);
-    border-radius:0;            /* flush to edges */
-    background:var(--stage-bg)
+    border-radius:0;
+    background:var(--stage-bg);
+    touch-action:none; /* ← 기본 스크롤/줌 제스처 차단 */
   }
 
+  .pan-hint {
+    font-family: "JetBrains Mono", "Menlo", "Consolas", monospace;
+    letter-spacing: 0.5px;
+  }
   .content{position:absolute;inset:0;transform-origin:0 0}
 
   .glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:var(--fg);user-select:none;white-space:pre}
@@ -44,7 +50,7 @@
   .zbtn{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:all 0.2s ease}
   .zbtn:hover{border-color:var(--border-hover);background:var(--btn-hover)}
   .stage.panning{cursor:grab}
-  .stage.panning.dragging{cursor:grabbing}
+  .stage.dragging{cursor:grabbing}
 
   /* Toast */
   .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-fg);padding:6px 10px;border-radius:6px;font-size:11px;opacity:0;pointer-events:none;transition:opacity .25s ease}
@@ -53,21 +59,32 @@
   /* Pan hint */
   .pan-hint{position:absolute;left:12px;bottom:12px;color:var(--muted);font-size:10px;pointer-events:none;user-select:none}
 
-  /* === PANEL AS OVERLAY === */
+  /* === PANEL (dark-mode only) === */
   .panel{
-    position:absolute;left:12px;top:12px;z-index:5;
-    padding:12px 12px; margin:0;
-    background:var(--panel-bg); border:1px solid var(--border); border-radius:8px;
-    backdrop-filter: blur(6px);
+    position:absolute;
+    left:12px; top:12px; z-index:5;
+    background:none; border:none; backdrop-filter:none;
+    padding:0; margin:0;
   }
-  .panel.hidden{display:none}
-
-  .modes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .modes .dark-toggle{margin-left:auto}
-  .mode{appearance:none;border:1px solid var(--border);background:var(--btn-bg);color:var(--fg);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.2s ease}
-  .mode.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-
-  textarea{width:100%;min-height:0;resize:none;padding:0;border:0;outline:none}
+  .dark-toggle{
+    appearance:none;
+    background:none;
+    border:1px solid var(--border-hover);
+    border-radius:6px;
+    color:var(--fg);
+    font-size:18px;
+    line-height:1;
+    cursor:pointer;
+    padding:6px 8px;
+    transition:background .2s ease,border-color .2s ease,transform .15s ease;
+  }
+  .dark-toggle:hover{
+    background:var(--btn-hover);
+    border-color:var(--border);
+    transform:scale(1.06);
+    color:var(--muted);
+  }
+  .dark-toggle:active{ transform:scale(0.95); }
 </style>
 </head>
 <body>
@@ -76,30 +93,22 @@
   <div class="stage" id="stage" aria-label="렌더 스테이지">
     <div id="content" class="content"></div>
 
-    <!-- Overlay panel (inside stage) -->
+    <!-- Panel: only dark-mode toggle remains -->
     <section class="panel" id="panel">
-      <div class="modes" id="modeBar">
-        <button class="mode active" data-mode="normal">Normal</button>
-        <button class="mode" data-mode="circle">Circle</button>
-        <button class="mode" data-mode="spiral">Spiral</button>
-        <button class="mode" data-mode="wave">Wave</button>
-        <button class="mode" data-mode="tree">Tree</button>
-        <button class="mode dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
-      </div>
+      <button class="dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
       <!-- proxy input stays hidden; keep in DOM -->
       <textarea id="proxyInput" class="proxyInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0"></textarea>
     </section>
 
-    <!-- Zoom dock extended with Panel toggle -->
+    <!-- Zoom dock -->
     <div class="zoomDock">
       <button class="zbtn" data-zoom="out" title="Zoom out">−</button>
       <button class="zbtn" data-zoom="reset" title="Reset to 100%">100%</button>
       <button class="zbtn" data-zoom="in" title="Zoom in">+</button>
       <button class="zbtn" data-zoom="fit" title="Fit to view">Fit</button>
-      <button class="zbtn" data-panel="toggle" title="Toggle panel (P)">Panel</button>
     </div>
 
-    <div class="pan-hint">Hold Space + drag to pan view</div>
+    <div class="pan-hint">Tab to change mode • Drag to pan</div>
   </div>
 
   <div class="toast" id="toast" hidden></div>
@@ -112,16 +121,28 @@
   const zoomDock= stage.querySelector('.zoomDock');
   const panel   = document.getElementById('panel');
   const input   = document.getElementById('proxyInput');
-  const modeBar = document.getElementById('modeBar');
   const toast   = document.getElementById('toast');
   const darkToggle = document.getElementById('darkToggle');
+
+  /* === 모드 목록: UI 없이 고정 === */
+  const MODE_ORDER = ['normal','circle','spiral','wave','tree'];
+
+  function modeLabel(m){ return m[0].toUpperCase()+m.slice(1); }
+  function cycleMode(dir){
+    const curIdx = MODE_ORDER.indexOf(mode);
+    const i = curIdx < 0 ? 0 : curIdx;
+    const ni = (i + (dir>0?1:-1) + MODE_ORDER.length) % MODE_ORDER.length;
+    const next = MODE_ORDER[ni];
+    setMode(next);
+    showToast(`Mode: ${modeLabel(next)}`);
+  }
 
   // ===== Mode params =====
   const NORMAL_COLS = 60;
   const NORMAL_STEP_X = 12, NORMAL_STEP_Y = 24;
   const CIRCLE_RADIUS = 120;
   const SPIRAL_A = 3, SPIRAL_B = 0.10;
-  const WAVE_A = 60, WAVE_LAMBDA = 140;
+  const WAVE_A = 60, WAVE_LAMBDA = 200;
   const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40;
   const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;
   const FIT_PADDING = 40;
@@ -237,10 +258,9 @@
     for(const ch of cur) placeNextChar(ch); prevText=cur;
   }
 
-  // Mode switch
+  // Mode switch (Tab 전용)
   function setMode(newMode){
     mode=newMode;
-    document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('active', x.dataset.mode===newMode));
     pen.mode=mode; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; pen._trackX=0; placeCaret();
     focusToTextarea();
   }
@@ -265,10 +285,20 @@
     document.documentElement.setAttribute('data-theme', saved);
     darkToggle.textContent = saved==='dark' ? '☀️' : '🌙';
   }
-  modeBar.addEventListener('click', (e)=>{
-    const b=e.target.closest('.mode'); if(!b) return;
-    if(b.id==='darkToggle'){ toggleDarkMode(); return; }
-    setMode(b.dataset.mode);
+
+  // 패널(다크 토글만 존재)
+  panel.addEventListener('pointerdown', (e)=> e.stopPropagation());
+  panel.addEventListener('pointerup',   (e)=> e.stopPropagation());
+  panel.addEventListener('click',       (e)=> e.stopPropagation());
+  darkToggle.addEventListener('click', toggleDarkMode);
+
+  // ===== Keyboard: Tab cycle (Space는 선택 보조경로로 유지하지 않음) =====
+  window.addEventListener('keydown', (e)=>{ 
+    if(e.key==='Tab'){
+      if (typeof composing !== 'undefined' && composing) return;
+      e.preventDefault();
+      cycleMode(e.shiftKey ? -1 : 1);
+    }
   });
 
   // ===== Zoom & Pan =====
@@ -285,7 +315,7 @@
     return { x:(sx-offsetX)/zoom, y:(sy-offsetY)/zoom };
   }
 
-  // Debounced wheel zoom
+  // 휠 줌
   let lastWheel=0;
   stage.addEventListener('wheel', (e)=>{
     e.preventDefault();
@@ -294,109 +324,71 @@
     const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); updateZoomDisplay();
   }, {passive:false});
 
-  // Pan + Click-to-Type
-  let spaceDown=false, dragging=false, lastX=0,lastY=0;
-  let gestureActive=false, gDownX=0, gDownY=0, gSpaceAtDown=false;
+  // ===== Drag to pan (Space 없이) + Click-to-type 보호 =====
+  let panCandidate=false, dragging=false, lastX=0,lastY=0, downX=0, downY=0;
   const DRAG_THRESHOLD=4;
+  let restoreFocusAfterDrag=false;
 
-  // 드래그 종료 후 포커스 복구 플래그
-  let restoreFocusAfterDrag = false;
-
-  // UI 영역(패널/줌Dock) 클릭 여부
   function isUIHit(target){
     return !!(target.closest('.panel') || target.closest('.zoomDock'));
   }
 
-  window.addEventListener('keydown', (e)=>{ 
-    if(e.code==='Space'){ spaceDown=true; stage.classList.add('panning'); e.preventDefault(); }
-    if(e.key==='p' || e.key==='P'){ panel.classList.toggle('hidden'); } // Panel toggle (P)
-  });
-
-  window.addEventListener('keyup', (e)=>{
-    if(e.code==='Space'){
-      spaceDown=false; stage.classList.remove('panning');
-      if (!dragging) focusToTextarea();  // Space만 떼어도 포커스 복구
-    }
-  });
-
-  // 패널 쪽 이벤트 전파 차단 — 이중 안전장치
-  panel.addEventListener('pointerdown', (e)=> e.stopPropagation());
-  panel.addEventListener('pointerup',   (e)=> e.stopPropagation());
-  panel.addEventListener('click',       (e)=> e.stopPropagation());
-
-  // pointerdown — UI 클릭은 제스처 시작 안 함
   stage.addEventListener('pointerdown', (e)=>{
-    if (isUIHit(e.target)) return;   // 패널/줌Dock 내부 클릭 무시
+    if (isUIHit(e.target)) return;      // UI 위에서는 제스처 시작 금지
+    panCandidate=true; dragging=false;
+    downX=lastX=e.clientX; downY=lastY=e.clientY;
+    stage.setPointerCapture(e.pointerId);
+    e.preventDefault();                 // 모바일 스크롤/텍스트 선택 방지
+  });
 
-    if(e.button===1){
-      dragging=true; stage.classList.add('dragging');
-      lastX=e.clientX; lastY=e.clientY;
-      stage.setPointerCapture(e.pointerId);
-      return;
+  stage.addEventListener('pointermove', (e)=>{
+    if(!panCandidate && !dragging) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    const movedTotal=Math.hypot(e.clientX-downX, e.clientY-downY);
+
+    if(!dragging){
+      if(movedTotal>DRAG_THRESHOLD){
+        dragging=true;
+        stage.classList.add('dragging');
+        restoreFocusAfterDrag=true;
+      } else {
+        return; // 아직 클릭 판단 구간
+      }
     }
 
-    gestureActive=true; gDownX=e.clientX; gDownY=e.clientY; gSpaceAtDown=spaceDown;
-
-    if(spaceDown){
-      dragging=true; stage.classList.add('dragging');
-      lastX=e.clientX; lastY=e.clientY;
-      restoreFocusAfterDrag = true;         // 패닝 종료 시 포커스 복구
-      stage.setPointerCapture(e.pointerId);
-      return;
-    }
+    offsetX+=dx; offsetY+=dy;
+    lastX=e.clientX; lastY=e.clientY;
+    applyView();
     e.preventDefault();
   });
 
-  // pointermove — 패닝
-  stage.addEventListener('pointermove', (e)=>{
-    if(!dragging) return;
-    const dx=e.clientX-lastX, dy=e.clientY-lastY;
-    offsetX+=dx; offsetY+=dy; lastX=e.clientX; lastY=e.clientY; applyView();
-  });
-
-  // pointerup — UI 클릭이거나 드래그/공간키 관련이면 커서 이동 스킵
-  stage.addEventListener('pointerup', (e)=>{
+  function endPointer(e){
     if(dragging){
       dragging=false; stage.classList.remove('dragging');
-      if (restoreFocusAfterDrag) {
-        restoreFocusAfterDrag = false;
-        focusToTextarea();               // 패닝 종료 즉시 포커스 복구
-      }
+      if (restoreFocusAfterDrag){ restoreFocusAfterDrag=false; focusToTextarea(); }
+      panCandidate=false;
+      return; // 패닝 제스처였다면 커서 이동 없음
     }
-    if(!gestureActive) return;
-    const moved=Math.hypot(e.clientX-gDownX, e.clientY-gDownY);
-    const wasSpace=gSpaceAtDown; 
-    gestureActive=false;
 
-    if (isUIHit(e.target)) return;      // UI 클릭이면 커서 이동 없음
-    if(moved<=DRAG_THRESHOLD && !wasSpace && e.button!==1){
+    if(!panCandidate) return;
+    panCandidate=false;
+
+    // 클릭-투-타입 (threshold 이하로 움직였을 때만)
+    const moved=Math.hypot(e.clientX-downX, e.clientY-downY);
+    if(moved<=DRAG_THRESHOLD && e.button!==1){
       const {x,y}=toContentCoords(e.clientX, e.clientY);
       pen.anchorX=x; pen.anchorY=y; pen.anchorZ=0; 
       pen.x=x; pen.y=y; pen.z=0; pen.i=0; pen._trackX=0;
       placeCaret(); focusToTextarea();
     }
-  });
+  }
+
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
 
   // Keep typing flowing to proxy input even if stage has focus
   stage.addEventListener('keydown', (e)=>{
-    if(e.code==='Space') return;
     if(document.activeElement!==input){ focusToTextarea(); }
-  });
-
-  // Zoom dock handlers
-  zoomDock.addEventListener('click', (e)=>{
-    const zb=e.target.closest('.zbtn'); if(!zb) return;
-    const z=zb.dataset.zoom;
-    if(z==='in'){ const r=stageRect(); zoomAt(r.width/2, r.height/2, 1.1); }
-    else if(z==='out'){ const r=stageRect(); zoomAt(r.width/2, r.height/2, 1/1.1); }
-    else if(z==='reset'){ zoom=1; offsetX=0; offsetY=0; applyView(); }
-    else if(z==='fit'){ fitToView(); }
-
-    if(zb.dataset.panel==='toggle' || zb.getAttribute('data-panel')==='toggle'){
-      panel.classList.toggle('hidden');
-      // 패널 토글 후에도 입력 포커스 유지
-      focusToTextarea();
-    }
   });
 
   // init
