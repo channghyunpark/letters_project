@@ -8,7 +8,7 @@
   const darkToggle = document.getElementById('darkToggle');
 
   /* === 모드 목록: UI 없이 고정 === */
-  const MODE_ORDER = ['normal','circle','spiral','wave','tree'];
+  const MODE_ORDER = ['normal','circle','spiral','wave','tree','random'];
 
   function modeLabel(m){ return m[0].toUpperCase()+m.slice(1); }
   function cycleMode(dir){
@@ -29,11 +29,15 @@
   const TREE_SPREAD_BASE = 120, TREE_SPREAD_STEP = 40;
   const TREE_JITTER_X = 8, TREE_JITTER_Y = 5;
   const FIT_PADDING = 40;
+  const RANDOM_COLS = 40;
+  const RANDOM_STEP_X = 18, RANDOM_STEP_Y = 28;
+  const RANDOM_JITTER_X = 14, RANDOM_JITTER_Y = 20;
+  const RANDOM_SCALE_MIN = 0.6, RANDOM_SCALE_MAX = 1.6;
 
   // Tracking
   let TRACK_LATIN = 0;
   let TRACK_HANGUL = 3;
-  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false };
+  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false, random:false };
 
   function isHangul(ch){ const c=ch.codePointAt(0);
     return (c>=0x1100&&c<=0x11FF)||(c>=0x3130&&c<=0x318F)||(c>=0xAC00&&c<=0xD7AF); }
@@ -68,6 +72,17 @@
       const x=((j+0.5)/count-0.5)*spread*2 + jx*level*TREE_JITTER_X;
       const y=level*60 + jy*level*TREE_JITTER_Y;
       return { dx:x, dy:y, dz:0, rot:0, scale:1 };
+    },
+    random(i){
+      const cols=RANDOM_COLS;
+      const row=Math.floor(i/cols), col=i%cols;
+      const baseX=col*RANDOM_STEP_X;
+      const baseY=row*RANDOM_STEP_Y;
+      const jx=jitter(i,3)*RANDOM_JITTER_X;
+      const jy=jitter(i,4)*RANDOM_JITTER_Y;
+      const scaleRand = hash32(i*95939543);
+      const scale = RANDOM_SCALE_MIN + (RANDOM_SCALE_MAX - RANDOM_SCALE_MIN) * scaleRand;
+      return { dx:baseX + jx, dy:baseY + jy, dz:0, rot:0, scale };
     }
   };
   function getPath(n){ return Path[n]||Path.normal; }
@@ -96,11 +111,17 @@
     const el=document.createElement('div');
     el.className='glyph';
     el.textContent = (ch===' ' ? ' ' : ch);
-    const rotate = (pen.mode==='circle'||pen.mode==='spiral') ? ` rotate(${p.rot}rad)` : '';
-    el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)` + rotate;
+    const transforms = [`translate3d(${x}px, ${y}px, ${z}px)`];
+    if ((pen.mode==='circle' || pen.mode==='spiral') && p.rot){
+      transforms.push(`rotate(${p.rot}rad)`);
+    }
+    if (p.scale && p.scale !== 1){
+      transforms.push(`scale(${p.scale})`);
+    }
+    el.style.transform = transforms.join(' ');
 
     content.appendChild(el);
-    glyphs.push({el,ch,x,y,z});
+    glyphs.push({el,ch,x,y,z,scale:p.scale||1});
 
     pen.x=x; pen.y=y; pen.z=z; pen.i+=1; placeCaret(); maybeAutoFit();
   }
@@ -113,7 +134,7 @@
     pen.i=Math.max(0,pen.i-1); placeCaret();
   }
 
-  function maybeAutoFit(){ if(!didAutoFit && glyphs.length===1){ fitToView(); didAutoFit=true; } }
+  function maybeAutoFit(){ /* auto-fit disabled by request */ }
 
   // Strict append-only
   const STRICT_APPEND=true;
