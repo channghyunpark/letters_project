@@ -8,7 +8,7 @@
   const darkToggle = document.getElementById('darkToggle');
 
   /* === 모드 목록: UI 없이 고정 === */
-  const MODE_ORDER = ['normal','circle','spiral','wave','tree','random'];
+  const MODE_ORDER = ['normal','circle','spiral','wave','tree','spread'];
 
   function modeLabel(m){ return m[0].toUpperCase()+m.slice(1); }
   function cycleMode(dir){
@@ -37,7 +37,7 @@
   // Tracking
   let TRACK_LATIN = 0;
   let TRACK_HANGUL = 3;
-  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false, random:false };
+  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false, spread:false };
 
   function isHangul(ch){ const c=ch.codePointAt(0);
     return (c>=0x1100&&c<=0x11FF)||(c>=0x3130&&c<=0x318F)||(c>=0xAC00&&c<=0xD7AF); }
@@ -84,7 +84,7 @@
       const y=level*60 + jy*level*TREE_JITTER_Y;
       return { dx:x, dy:y, dz:0, rot:0, scale:1 };
     },
-    random(i){
+    spread(i){
       const baseScale = randomInRange(RANDOM_SCALE_MIN, RANDOM_SCALE_MAX);
       const baseRot = (rand()*2 - 1) * RANDOM_ROT_MAX;
       if(i===0){
