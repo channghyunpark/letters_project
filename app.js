@@ -6,6 +6,7 @@
   const input   = document.getElementById('proxyInput');
   const toast   = document.getElementById('toast');
   const darkToggle = document.getElementById('darkToggle');
+  const startOverlay = document.getElementById('startOverlay');
 
   /* === 모드 목록: UI 없이 고정 === */
   const MODE_ORDER = ['normal','circle','spiral','wave','tree','spread'];
@@ -37,7 +38,29 @@
   // Tracking
   let TRACK_LATIN = 0;
   let TRACK_HANGUL = 3;
+  const NORMAL_TRACK_LATIN = 0.8;
+  const NORMAL_TRACK_HANGUL = 1.8;
   const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false, spread:false };
+
+  const measurer=document.createElement('span');
+  measurer.className='glyph';
+  measurer.style.position='absolute';
+  measurer.style.transform='none';
+  measurer.style.visibility='hidden';
+  measurer.style.pointerEvents='none';
+  measurer.style.whiteSpace='pre';
+  measurer.style.left='-9999px';
+  measurer.style.top='-9999px';
+  document.body.appendChild(measurer);
+  const widthCache=new Map();
+  function measureGlyphWidth(ch){
+    const key=ch===' ' ? 'space' : ch;
+    if(widthCache.has(key)) return widthCache.get(key);
+    measurer.textContent=(ch===' ' ? '\u00A0' : ch);
+    const w=measurer.getBoundingClientRect().width||0;
+    widthCache.set(key,w);
+    return w;
+  }
 
   function isHangul(ch){ const c=ch.codePointAt(0);
     return (c>=0x1100&&c<=0x11FF)||(c>=0x3130&&c<=0x318F)||(c>=0xAC00&&c<=0xD7AF); }
@@ -48,11 +71,22 @@
   let mode='normal';
   let glyphs=[];
   let prevText='';
-  const pen={ x:0,y:0,z:0,i:0,mode:'normal',anchorX:0,anchorY:0,anchorZ:0,_trackX:0 };
+  const pen={ x:0,y:0,z:0,i:0,mode:'normal',anchorX:0,anchorY:0,anchorZ:0,_trackX:0,flowX:0,flowY:0,lineStartX:0 };
   let didAutoFit=false;
 
   function stageRect(){ return stage.getBoundingClientRect(); }
-  function initPen(){ const r=stageRect(); pen.x=r.width/2; pen.y=r.height/2; pen.z=0; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; }
+  function initPen(){
+    const r=stageRect();
+    pen.anchorX = r.width/2;
+    pen.anchorY = r.height/2;
+    pen.anchorZ = 0;
+    pen.i = 0;
+    pen._trackX = 0;
+    pen.flowX = pen.anchorX;
+    pen.flowY = pen.anchorY;
+    pen.lineStartX = pen.anchorX;
+    updatePenPosition();
+  }
 
   // Deterministic jitter
   function hash32(x){ let t=x+0x6D2B79F5; t=Math.imul(t ^ (t>>>15), t|1); t^= t + Math.imul(t ^ (t>>>7), t | 61); return ((t ^ (t>>>14))>>>0)/4294967296; }
@@ -106,21 +140,111 @@
 
   // Caret
   const caret=document.createElement('div');
-  caret.className='glyph'; caret.textContent='▮'; caret.style.opacity='0.5';
+  caret.className='glyph caret is-active';
+  caret.textContent='';
   content.appendChild(caret);
-  function placeCaret(){ caret.style.transform=`translate3d(${pen.x}px, ${pen.y}px, ${pen.z}px)`; }
-
-  function placeNextChar(ch){
-    if (ch === '\n'){
-      pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
-      pen.x = pen.anchorX; pen.y = pen.anchorY; pen.z = pen.anchorZ;
-      pen.i = 0; pen._trackX = 0; placeCaret(); maybeAutoFit(); return;
+  function updatePenPosition(){
+    if(pen.mode==='normal'){
+      pen.x = pen.flowX;
+      pen.y = pen.flowY;
+      pen.z = pen.anchorZ;
+      return;
     }
     const p=getPath(pen.mode)(pen.i);
+    const trackX = TRACK_APPLY_MODES[pen.mode] ? (pen._trackX || 0) : 0;
+    pen.x = pen.anchorX + p.dx + trackX;
+    pen.y = pen.anchorY + p.dy;
+    pen.z = pen.anchorZ + p.dz;
+  }
+  const CARET_VIEW_MARGIN = 80;
+
+  function placeCaret(){
+    caret.style.transform=`translate3d(${pen.x}px, ${pen.y}px, ${pen.z}px)`;
+  }
+
+  function ensureCaretInView(){
+    const rect=stageRect();
+    if(!rect) return;
+    const margin=CARET_VIEW_MARGIN;
+    const caretScreenX = pen.x * zoom + offsetX;
+    const caretScreenY = pen.y * zoom + offsetY;
+    let changed=false;
+    if(caretScreenX < margin){
+      offsetX += margin - caretScreenX;
+      changed=true;
+    } else if(caretScreenX > rect.width - margin){
+      offsetX += (rect.width - margin) - caretScreenX;
+      changed=true;
+    }
+    if(caretScreenY < margin){
+      offsetY += margin - caretScreenY;
+      changed=true;
+    } else if(caretScreenY > rect.height - margin){
+      offsetY += (rect.height - margin) - caretScreenY;
+      changed=true;
+    }
+    if(changed){
+      applyView();
+    }
+  }
+
+  function syncCaret(){
+    placeCaret();
+    ensureCaretInView();
+  }
+
+  function hideStartOverlay(){
+    if(startOverlay && !startOverlay.classList.contains('is-hidden')){
+      startOverlay.classList.add('is-hidden');
+    }
+    caret.classList.add('is-active');
+  }
+
+  function placeNextChar(ch){
+    hideStartOverlay();
+    if (ch === '\n'){
+      if(pen.mode==='normal'){
+        pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
+        pen.flowY = pen.anchorY;
+        pen.flowX = pen.lineStartX;
+        pen.i = 0;
+        updatePenPosition();
+        syncCaret(); maybeAutoFit(); return;
+      }
+      pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
+      pen.i = 0;
+      pen._trackX = 0;
+      updatePenPosition();
+      syncCaret(); maybeAutoFit(); return;
+    }
+
+    if(pen.mode==='normal'){
+      const baseWidth = measureGlyphWidth(ch);
+      const tracking = isHangul(ch) ? NORMAL_TRACK_HANGUL : NORMAL_TRACK_LATIN;
+      const x = pen.flowX;
+      const y = pen.flowY;
+      const z = pen.anchorZ;
+      const el=document.createElement('div');
+      el.className='glyph';
+      el.textContent = (ch===' ' ? ' ' : ch);
+      el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+      content.appendChild(el);
+      const advance = baseWidth + tracking;
+      glyphs.push({el,ch,x,y,z,scale:1,trackDelta:0,width:baseWidth,advance,mode:'normal'});
+      pen.flowX = x + advance;
+      pen.i += 1;
+      updatePenPosition();
+      syncCaret(); maybeAutoFit();
+      return;
+    }
+
+    const p=getPath(pen.mode)(pen.i);
     let extraX=0;
+    let trackDelta=0;
     if (TRACK_APPLY_MODES[pen.mode]){
       const t = isHangul(ch) ? TRACK_HANGUL : TRACK_LATIN;
       extraX = pen._trackX || 0;
+      trackDelta = t;
       pen._trackX = (pen._trackX || 0) + t;
     }
     const x=pen.anchorX + p.dx + extraX, y=pen.anchorY + p.dy, z=pen.anchorZ + p.dz;
@@ -138,17 +262,35 @@
     el.style.transform = transforms.join(' ');
 
     content.appendChild(el);
-    glyphs.push({el,ch,x,y,z,scale:p.scale||1});
+    const baseWidth = measureGlyphWidth(ch);
+    const scaledWidth = baseWidth * (p.scale || 1);
+    glyphs.push({el,ch,x,y,z,scale:p.scale||1,trackDelta,width:scaledWidth,mode:pen.mode});
 
-    pen.x=x; pen.y=y; pen.z=z; pen.i+=1; placeCaret(); maybeAutoFit();
+    pen.i+=1;
+    updatePenPosition();
+    syncCaret(); maybeAutoFit();
   }
 
   function backspaceOne(){
     if(!glyphs.length) return;
     const g=glyphs.pop(); g.el.remove();
-    const last=glyphs[glyphs.length-1];
-    if(last){ pen.x=last.x; pen.y=last.y; pen.z=last.z; } else { initPen(); }
-    pen.i=Math.max(0,pen.i-1); placeCaret();
+    if(g.mode==='normal'){
+      pen.flowX = g.x;
+      pen.flowY = g.y;
+      pen.i=Math.max(0,pen.i-1);
+      updatePenPosition();
+      syncCaret();
+      clearSelectionVisual();
+      return;
+    }
+    const delta = g.trackDelta || 0;
+    if(delta){
+      pen._trackX = Math.max(0, (pen._trackX || 0) - delta);
+    }
+    pen.i=Math.max(0,pen.i-1);
+    if(pen.i===0){ pen._trackX = 0; }
+    updatePenPosition();
+    syncCaret();
   }
 
   function maybeAutoFit(){ /* auto-fit disabled by request */ }
@@ -175,14 +317,14 @@
       input.value=prevText; input.setSelectionRange(prevText.length,prevText.length);
       showToast('중간 편집은 이어쓰기 모드에서 허용되지 않습니다.'); return;
     }
-    content.querySelectorAll('.glyph').forEach(n=>n.remove()); glyphs=[]; initPen(); placeCaret();
+    content.querySelectorAll('.glyph').forEach(n=>n.remove()); glyphs=[]; initPen(); syncCaret();
     for(const ch of cur) placeNextChar(ch); prevText=cur;
   }
 
   // Mode switch (Tab 전용)
   function setMode(newMode){
     mode=newMode;
-    pen.mode=mode; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; pen._trackX=0; placeCaret();
+    pen.mode=mode; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; pen._trackX=0; updatePenPosition(); syncCaret();
     focusToTextarea();
   }
 
@@ -223,13 +365,19 @@
   });
 
   // ===== Zoom & Pan =====
-  let zoom=1, offsetX=0, offsetY=0; const minZoom=0.3, maxZoom=4;
+  let zoom=1, offsetX=0, offsetY=0; const minZoom=0.3, maxZoom=4; const ZOOM_STEP=1.2;
   function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
   function updateZoomDisplay(){ const btn=zoomDock.querySelector('[data-zoom="reset"]'); if(btn) btn.textContent=Math.round(zoom*100)+'%'; }
   function applyView(){ content.style.transform=`translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; updateZoomDisplay(); }
   function zoomAt(cx,cy,f){ const nz=clamp(zoom*f,minZoom,maxZoom); const px=(cx-offsetX)/zoom; const py=(cy-offsetY)/zoom; zoom=nz; offsetX=cx-px*zoom; offsetY=cy-py*zoom; applyView(); }
   function contentBounds(){ if(!glyphs.length) return {minX:0,minY:0,maxX:1,maxY:1}; let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; glyphs.forEach(g=>{minX=Math.min(minX,g.x);minY=Math.min(minY,g.y);maxX=Math.max(maxX,g.x);maxY=Math.max(maxY,g.y);}); return {minX,minY,maxX,maxY}; }
   function fitToView(){ const r=stageRect(); const b=contentBounds(); const w=Math.max(1,b.maxX-b.minX+FIT_PADDING*2); const h=Math.max(1,b.maxY-b.minY+FIT_PADDING*2); const s=Math.min(r.width/w,r.height/h); zoom=clamp(s,minZoom,maxZoom); offsetX=(r.width-(b.maxX-b.minX)*zoom)/2 - b.minX*zoom; offsetY=(r.height-(b.maxY-b.minY)*zoom)/2 - b.minY*zoom; applyView(); }
+  function resetView(){
+    zoom=1;
+    offsetX=0;
+    offsetY=0;
+    applyView();
+  }
 
   function toContentCoords(clientX, clientY){
     const r=stageRect(); const sx=clientX-r.left; const sy=clientY-r.top;
@@ -244,6 +392,22 @@
     const rect=stageRect(); const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
     const factor=Math.pow(1.1,-Math.sign(e.deltaY)); zoomAt(cx,cy,factor); updateZoomDisplay();
   }, {passive:false});
+
+  zoomDock.addEventListener('click', (e)=>{
+    const btn=e.target.closest('.zbtn');
+    if(!btn) return;
+    const action=btn.dataset.zoom;
+    if(action==='in' || action==='out'){
+      const rect=stageRect();
+      const factor=action==='in' ? ZOOM_STEP : 1/ZOOM_STEP;
+      zoomAt(rect.width/2, rect.height/2, factor);
+    } else if(action==='reset'){
+      resetView();
+    } else if(action==='fit'){
+      fitToView();
+    }
+    e.preventDefault();
+  });
 
   // ===== Drag to pan (Space 없이) + Click-to-type 보호 =====
   let panCandidate=false, dragging=false, lastX=0,lastY=0, downX=0, downY=0;
@@ -299,8 +463,9 @@
     if(moved<=DRAG_THRESHOLD && e.button!==1){
       const {x,y}=toContentCoords(e.clientX, e.clientY);
       pen.anchorX=x; pen.anchorY=y; pen.anchorZ=0; 
-      pen.x=x; pen.y=y; pen.z=0; pen.i=0; pen._trackX=0;
-      placeCaret(); focusToTextarea();
+      pen.i=0; pen._trackX=0;
+      updatePenPosition();
+      syncCaret(); focusToTextarea();
     }
   }
 
@@ -315,7 +480,9 @@
   // init
   document.documentElement.style.setProperty('--anim-ms','800');
   initDarkMode();
-  initPen(); placeCaret(); applyView();
+  initPen(); syncCaret(); applyView();
+  if(input.value.length){ hideStartOverlay(); }
+  focusToTextarea();
 
   // On resize, keep fit if nothing typed yet; else maintain current view
   window.addEventListener('resize', ()=>{ if(!glyphs.length){ applyView(); } });
