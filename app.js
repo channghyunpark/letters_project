@@ -1,6 +1,10 @@
 (() => {
   const stage   = document.getElementById('stage');
   const content = document.getElementById('content');
+  const selectionBox=document.createElement('div');
+  selectionBox.className='selection-box';
+  selectionBox.hidden=true;
+  content.appendChild(selectionBox);
   const zoomDock= stage.querySelector('.zoomDock');
   const panel   = document.getElementById('panel');
   const input   = document.getElementById('proxyInput');
@@ -40,7 +44,7 @@
   let TRACK_HANGUL = 3;
   const NORMAL_TRACK_LATIN = 0.8;
   const NORMAL_TRACK_HANGUL = 1.8;
-  const TRACK_APPLY_MODES = { normal:true, wave:true, circle:false, spiral:false, tree:false, spread:false };
+  const TRACK_APPLY_MODES = { normal:false, wave:true, circle:false, spiral:false, tree:false, spread:false };
 
   const measurer=document.createElement('span');
   measurer.className='glyph';
@@ -51,8 +55,10 @@
   measurer.style.whiteSpace='pre';
   measurer.style.left='-9999px';
   measurer.style.top='-9999px';
-  document.body.appendChild(measurer);
+  (document.body || document.documentElement).appendChild(measurer);
   const widthCache=new Map();
+  const MIN_SPACE_WIDTH = 6;
+
   function measureGlyphWidth(ch){
     const key=ch===' ' ? 'space' : ch;
     if(widthCache.has(key)) return widthCache.get(key);
@@ -193,6 +199,66 @@
     ensureCaretInView();
   }
 
+  function clearSelectionVisual(){
+    content.classList.remove('selection-active');
+    selectionBox.hidden=true;
+    selectionBox.style.width='';
+    selectionBox.style.height='';
+    selectionBox.style.left='';
+    selectionBox.style.top='';
+  }
+
+  function isAllSelected(){
+    const value = input.value || '';
+    if(!value.length) return false;
+    if(document.activeElement !== input) return false;
+    try{
+      return input.selectionStart === 0 && input.selectionEnd === value.length;
+    } catch(_){
+      return false;
+    }
+  }
+
+  function updateSelectionVisual(){
+    if(isAllSelected()){
+      const bounds = computeSelectionBounds();
+      if(bounds){
+        selectionBox.style.left = bounds.left + 'px';
+        selectionBox.style.top = bounds.top + 'px';
+        selectionBox.style.width = bounds.width + 'px';
+        selectionBox.style.height = bounds.height + 'px';
+        selectionBox.hidden=false;
+        content.classList.add('selection-active');
+      } else {
+        clearSelectionVisual();
+      }
+    } else {
+      clearSelectionVisual();
+    }
+  }
+
+  function computeSelectionBounds(){
+    if(!glyphs.length) return null;
+    const contentRect = content.getBoundingClientRect();
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const g of glyphs){
+      const rect=g.el.getBoundingClientRect();
+      const left=rect.left-contentRect.left;
+      const top=rect.top-contentRect.top;
+      const right=rect.right-contentRect.left;
+      const bottom=rect.bottom-contentRect.top;
+      if(!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(right) || !Number.isFinite(bottom)) continue;
+      minX=Math.min(minX,left);
+      minY=Math.min(minY,top);
+      maxX=Math.max(maxX,right);
+      maxY=Math.max(maxY,bottom);
+    }
+    if(minX===Infinity || minY===Infinity) return null;
+    const width=Math.max(1, maxX-minX);
+    const height=Math.max(1, maxY-minY);
+    return { left:minX, top:minY, width, height };
+  }
+
   function hideStartOverlay(){
     if(startOverlay && !startOverlay.classList.contains('is-hidden')){
       startOverlay.classList.add('is-hidden');
@@ -202,10 +268,12 @@
 
   function placeNextChar(ch){
     hideStartOverlay();
+    clearSelectionVisual();
     if (ch === '\n'){
       if(pen.mode==='normal'){
         pen.anchorY = pen.anchorY + NORMAL_STEP_Y;
         pen.flowY = pen.anchorY;
+        pen.lineStartX = pen.anchorX;
         pen.flowX = pen.lineStartX;
         pen.i = 0;
         updatePenPosition();
@@ -221,6 +289,7 @@
     if(pen.mode==='normal'){
       const baseWidth = measureGlyphWidth(ch);
       const tracking = isHangul(ch) ? NORMAL_TRACK_HANGUL : NORMAL_TRACK_LATIN;
+      const effectiveWidth = (ch===' ' ? Math.max(baseWidth, MIN_SPACE_WIDTH) : baseWidth);
       const x = pen.flowX;
       const y = pen.flowY;
       const z = pen.anchorZ;
@@ -229,8 +298,8 @@
       el.textContent = (ch===' ' ? ' ' : ch);
       el.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
       content.appendChild(el);
-      const advance = baseWidth + tracking;
-      glyphs.push({el,ch,x,y,z,scale:1,trackDelta:0,width:baseWidth,advance,mode:'normal'});
+      const advance = effectiveWidth + tracking;
+      glyphs.push({el,ch,x,y,z,scale:1,trackDelta:0,width:effectiveWidth,advance,mode:'normal'});
       pen.flowX = x + advance;
       pen.i += 1;
       updatePenPosition();
@@ -263,7 +332,8 @@
 
     content.appendChild(el);
     const baseWidth = measureGlyphWidth(ch);
-    const scaledWidth = baseWidth * (p.scale || 1);
+    const effectiveWidth = (ch===' ' ? Math.max(baseWidth, MIN_SPACE_WIDTH) : baseWidth);
+    const scaledWidth = effectiveWidth * (p.scale || 1);
     glyphs.push({el,ch,x,y,z,scale:p.scale||1,trackDelta,width:scaledWidth,mode:pen.mode});
 
     pen.i+=1;
@@ -291,6 +361,7 @@
     if(pen.i===0){ pen._trackX = 0; }
     updatePenPosition();
     syncCaret();
+    clearSelectionVisual();
   }
 
   function maybeAutoFit(){ /* auto-fit disabled by request */ }
@@ -301,6 +372,16 @@
   input.addEventListener('compositionstart', ()=> composing=true);
   input.addEventListener('compositionend',  ()=>{ composing=false; processInput(); });
   input.addEventListener('input',           ()=>{ if(!composing) processInput(); });
+  input.addEventListener('select',          updateSelectionVisual);
+  input.addEventListener('keyup',           updateSelectionVisual);
+  input.addEventListener('keydown',         (e)=>{
+    if((e.key==='a' || e.key==='A') && (e.metaKey || e.ctrlKey)){
+      requestAnimationFrame(updateSelectionVisual);
+    } else if(!e.metaKey && !e.ctrlKey && !e.altKey && e.key !== 'Shift'){
+      clearSelectionVisual();
+    }
+  });
+  input.addEventListener('blur',            clearSelectionVisual);
 
   function showToast(msg){
     if (!toast) return;
@@ -311,27 +392,52 @@
 
   function processInput(){
     const cur=input.value; const selStart=input.selectionStart; const isTail=(selStart===cur.length);
+    updateSelectionVisual();
     if(cur.startsWith(prevText)){ const appended=cur.slice(prevText.length); for(const ch of appended) placeNextChar(ch); prevText=cur; return; }
     if(prevText.startsWith(cur) && isTail){ const n=prevText.length-cur.length; for(let i=0;i<n;i++) backspaceOne(); prevText=cur; return; }
     if(STRICT_APPEND){
       input.value=prevText; input.setSelectionRange(prevText.length,prevText.length);
-      showToast('중간 편집은 이어쓰기 모드에서 허용되지 않습니다.'); return;
+      clearSelectionVisual();
+      return;
     }
     content.querySelectorAll('.glyph').forEach(n=>n.remove()); glyphs=[]; initPen(); syncCaret();
+    clearSelectionVisual();
     for(const ch of cur) placeNextChar(ch); prevText=cur;
   }
 
   // Mode switch (Tab 전용)
   function setMode(newMode){
     mode=newMode;
-    pen.mode=mode; pen.anchorX=pen.x; pen.anchorY=pen.y; pen.anchorZ=pen.z; pen.i=0; pen._trackX=0; updatePenPosition(); syncCaret();
+    pen.mode=mode;
+    pen.anchorX=pen.x;
+    pen.anchorY=pen.y;
+    pen.anchorZ=pen.z;
+    pen.i=0;
+    pen._trackX=0;
+    if(pen.mode==='normal'){
+      pen.flowX = pen.anchorX;
+      pen.flowY = pen.anchorY;
+      pen.lineStartX = pen.anchorX;
+    } else {
+      pen.flowX = pen.anchorX;
+      pen.flowY = pen.anchorY;
+    }
+    updatePenPosition();
+    syncCaret();
+    clearSelectionVisual();
     focusToTextarea();
   }
 
-  function focusToTextarea(){
+  function focusToTextarea(opts){
+    const preserveSelection = !!(opts && opts.preserveSelection);
     requestAnimationFrame(()=>{
       input.focus({ preventScroll:true });
-      const len=input.value.length; try{ input.setSelectionRange(len,len); }catch(_){}
+      if(!preserveSelection){
+        const len=input.value.length; try{ input.setSelectionRange(len,len); }catch(_){}
+        clearSelectionVisual();
+      } else {
+        updateSelectionVisual();
+      }
     });
   }
 
@@ -370,7 +476,19 @@
   function updateZoomDisplay(){ const btn=zoomDock.querySelector('[data-zoom="reset"]'); if(btn) btn.textContent=Math.round(zoom*100)+'%'; }
   function applyView(){ content.style.transform=`translate(${offsetX}px, ${offsetY}px) scale(${zoom})`; updateZoomDisplay(); }
   function zoomAt(cx,cy,f){ const nz=clamp(zoom*f,minZoom,maxZoom); const px=(cx-offsetX)/zoom; const py=(cy-offsetY)/zoom; zoom=nz; offsetX=cx-px*zoom; offsetY=cy-py*zoom; applyView(); }
-  function contentBounds(){ if(!glyphs.length) return {minX:0,minY:0,maxX:1,maxY:1}; let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; glyphs.forEach(g=>{minX=Math.min(minX,g.x);minY=Math.min(minY,g.y);maxX=Math.max(maxX,g.x);maxY=Math.max(maxY,g.y);}); return {minX,minY,maxX,maxY}; }
+  function contentBounds(){
+    if(!glyphs.length) return {minX:0,minY:0,maxX:1,maxY:1};
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    glyphs.forEach(g=>{
+      const w = g.width || 0;
+      const xEnd = g.x + w;
+      minX=Math.min(minX,g.x);
+      minY=Math.min(minY,g.y);
+      maxX=Math.max(maxX,xEnd);
+      maxY=Math.max(maxY,g.y);
+    });
+    return {minX,minY,maxX,maxY};
+  }
   function fitToView(){ const r=stageRect(); const b=contentBounds(); const w=Math.max(1,b.maxX-b.minX+FIT_PADDING*2); const h=Math.max(1,b.maxY-b.minY+FIT_PADDING*2); const s=Math.min(r.width/w,r.height/h); zoom=clamp(s,minZoom,maxZoom); offsetX=(r.width-(b.maxX-b.minX)*zoom)/2 - b.minX*zoom; offsetY=(r.height-(b.maxY-b.minY)*zoom)/2 - b.minY*zoom; applyView(); }
   function resetView(){
     zoom=1;
@@ -464,8 +582,13 @@
       const {x,y}=toContentCoords(e.clientX, e.clientY);
       pen.anchorX=x; pen.anchorY=y; pen.anchorZ=0; 
       pen.i=0; pen._trackX=0;
+      pen.flowX = x;
+      pen.flowY = y;
+      pen.lineStartX = x;
       updatePenPosition();
-      syncCaret(); focusToTextarea();
+      syncCaret();
+      focusToTextarea();
+      clearSelectionVisual();
     }
   }
 
@@ -474,7 +597,10 @@
 
   // Keep typing flowing to proxy input even if stage has focus
   stage.addEventListener('keydown', (e)=>{
-    if(document.activeElement!==input){ focusToTextarea(); }
+    if(document.activeElement!==input){
+      const preserve = e.metaKey || e.ctrlKey;
+      focusToTextarea(preserve ? { preserveSelection:true } : undefined);
+    }
   });
 
   // init
