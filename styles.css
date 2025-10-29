@@ -71,7 +71,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:
   opacity:1;
 }
 
-.glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:var(--fg);user-select:none;white-space:pre}
+.glyph{position:absolute;left:0;top:0;transform:translate3d(0,0,0);transition:transform var(--anim-ms) cubic-bezier(.22,.61,.36,1),opacity var(--anim-ms) ease;will-change:transform;font-size:18px;line-height:1;color:var(--fg);white-space:pre}
 .caret{
   mix-blend-mode:normal;
   width:2px;
