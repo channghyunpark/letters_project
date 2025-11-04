@@ -9,6 +9,7 @@
   const panel   = document.getElementById('panel');
   const input   = document.getElementById('proxyInput');
   const toast   = document.getElementById('toast');
+  const resetToggle = document.getElementById('resetAll');
   const darkToggle = document.getElementById('darkToggle');
   const startOverlay = document.getElementById('startOverlay');
 
@@ -266,6 +267,13 @@
     caret.classList.add('is-active');
   }
 
+  function showStartOverlay(){
+    if(startOverlay){
+      startOverlay.classList.remove('is-hidden');
+    }
+    caret.classList.remove('is-active');
+  }
+
   function placeNextChar(ch){
     hideStartOverlay();
     clearSelectionVisual();
@@ -405,6 +413,21 @@
     for(const ch of cur) placeNextChar(ch); prevText=cur;
   }
 
+  function resetAllContent(){
+    glyphs.forEach(g=>g.el.remove());
+    glyphs=[];
+    prevText='';
+    input.value='';
+    try{ input.setSelectionRange(0,0); }catch(_){}
+    clearSelectionVisual();
+    resetView();
+    initPen();
+    syncCaret();
+    showStartOverlay();
+    didAutoFit=false;
+    focusToTextarea();
+  }
+
   // Mode switch (Tab 전용)
   function setMode(newMode){
     mode=newMode;
@@ -459,6 +482,11 @@
   panel.addEventListener('pointerdown', (e)=> e.stopPropagation());
   panel.addEventListener('pointerup',   (e)=> e.stopPropagation());
   panel.addEventListener('click',       (e)=> e.stopPropagation());
+  if(resetToggle){
+    resetToggle.addEventListener('click', ()=>{
+      resetAllContent();
+    });
+  }
   darkToggle.addEventListener('click', toggleDarkMode);
 
   // ===== Keyboard: Tab cycle (Space는 선택 보조경로로 유지하지 않음) =====
